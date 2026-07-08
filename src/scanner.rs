@@ -1,18 +1,10 @@
+use crate::models::{PortStatus, ScanResult};
+use crate::net::create_nonblocking_tcp_socket;
 use nix::errno::Errno;
-use nix::sys::socket::{self, connect, getsockopt, sockopt};
-use nix::sys::socket::{AddressFamily, SockFlag, SockType, SockaddrIn};
-use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::poll::{self, PollFd, PollFlags};
-use owo_colors::OwoColorize;
-
+use nix::sys::socket::{connect, getsockopt, sockopt, SockaddrIn};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
-
-// pub enum PortStatus {
-//     Open,
-//     Closed,
-//     Timeout,
-// }
 
 pub struct PendingConnection {
     fd: OwnedFd,
@@ -26,46 +18,32 @@ pub struct Scanner {
 
 impl Scanner {
     pub fn new(ip: Ipv4Addr) -> Self {
-        Self { ip, pending: Vec::new(), }
+        Self { ip, pending: Vec::new() }
     }
 
-    fn create_nonblocking_tcp_socket() -> nix::Result<OwnedFd> {
-        let fd = socket::socket(
-            AddressFamily::Inet,
-            SockType::Stream,
-            SockFlag::empty(),
-            None,
-        )?;
-        
-        let current_flags = fcntl(&fd, FcntlArg::F_GETFL)?;
-        let new_flags = OFlag::from_bits_truncate(current_flags) | OFlag::O_NONBLOCK;
-        fcntl(&fd, FcntlArg::F_SETFL(new_flags))?;
-
-        Ok(fd)
-    }
-    
-    pub fn start_connection(&mut self, port: u16) -> nix::Result<()> {
+    pub fn start_connection(&mut self, port: u16) -> nix::Result<Option<ScanResult>> {
         let sockaddr = SockaddrIn::from(SocketAddrV4::new(self.ip, port));
-        let fd = Self::create_nonblocking_tcp_socket()?;
+        let fd = create_nonblocking_tcp_socket()?;
 
         match connect(fd.as_raw_fd(), &sockaddr) {
-            Ok(_) => {
-                println!("{}: {}", port.bold().white(), "Open".green());
-                Ok(())
-            }
+            Ok(_) => Ok(Some(ScanResult {
+                port,
+                status: PortStatus::Open,
+            })),
             Err(Errno::EINPROGRESS) => {
                 self.pending.push(PendingConnection { fd, port });
-                Ok(())
+                Ok(None)
             }
-            Err(Errno::ECONNREFUSED) => {
-                println!("{}: {}", port.bold().white(), "Closed".red());
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("{}: {}", port.bold().white(), e.red());
-                Err(e)
-            }
-        }    
+            Err(Errno::ECONNREFUSED) => Ok(Some(ScanResult {
+                port,
+                status: PortStatus::Closed,
+            })),
+            Err(Errno::ETIMEDOUT) => Ok(Some(ScanResult {
+                port,
+                status: PortStatus::Timeout,
+            })),
+            Err(_) => todo!(),
+        }
     }
 
     pub fn wait(&mut self) -> nix::Result<Vec<usize>> {
@@ -78,7 +56,6 @@ impl Scanner {
         poll::poll(&mut fds, 1000u16)?;
 
         let mut ready = Vec::new();
-            
         for (i, fd) in fds.iter().enumerate() {
             if let Some(events) = fd.revents() 
                 && events.contains(PollFlags::POLLOUT) {
@@ -88,29 +65,41 @@ impl Scanner {
         Ok(ready)
     }
 
-    pub fn connection_results(&mut self, ready: Vec<usize>) -> nix::Result<()> {
-        for i in ready.into_iter().rev() {
-            let conn = &self.pending.remove(i);
+    pub fn connection_results(&mut self, ready: Vec<usize>) -> nix::Result<Vec<ScanResult>> {
+        let mut results = Vec::new();
 
+        for i in ready.into_iter().rev() {
+            let conn = self.pending.remove(i);
             let err = getsockopt(&conn.fd, sockopt::SocketError)?;
 
             if err == 0 {
-                println!("{}: {}", conn.port.bold().white(), "Open".green());
+                results.push(ScanResult {
+                    port: conn.port,
+                    status: PortStatus::Open,
+                });
             } else {
-                println!("{}: {}", conn.port.bold().white(), "Closed".red());
+                results.push(ScanResult {
+                    port: conn.port,
+                    status: PortStatus::Closed,
+                });
             }
         }
-        Ok(())
+        Ok(results)
     }
 
-    pub fn run(&mut self, port: u16) -> nix::Result<()> {
-        self.start_connection(port)?;
-        
-        while !self.pending.is_empty() {
-            let ready = self.wait()?;
-            self.connection_results(ready)?;
+    pub fn run(&mut self, port: u16) -> nix::Result<Vec<ScanResult>> {
+        let mut results = Vec::new();
+
+        if let Some(res) = self.start_connection(port)? {
+            results.push(res);
+
         }
 
-        Ok(())
+        while !self.pending.is_empty() {
+            let ready = self.wait()?;
+            let mut batch = self.connection_results(ready)?;
+            results.append(&mut batch);
+        }
+        Ok(results)
     }
 }
