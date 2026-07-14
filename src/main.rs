@@ -15,23 +15,20 @@ fn main() -> nix::Result<()> {
 
     let mut scanner = Scanner::new(args.ip);
     
-    // Запускаем сканирование портов
+    // Парсим диапазон
     if let Some((start, end)) = Args::parse_range(&args.range) {
-
-        for port in start..=end {
-            let results = scanner.run(port)?;
+            // запускаем сканнирование
+            let results = scanner.run(start, end)?;
 
             // Выводим результаты
             for res in results {
                 let status = match res.status {
-                    models::PortStatus::Open => "Open".style(Style::new().green()),
-                    models::PortStatus::Closed => "Closed".style(Style::new().red()),
-                    models::PortStatus::Timeout => "Timeout".style(Style::new().cyan()),
+                    models::PortStatus::Open => "OPEN".style(Style::new().green()),
+                    models::PortStatus::Closed => "CLOSED".style(Style::new().red()),
+                    models::PortStatus::Timeout => "TIMEOUT".style(Style::new().cyan()),
                 };
-                println!("Port {}: {}", res.port.bold().white(), status);
+                println!("{:<8} {}", res.port.bold().white(), status);
             }
-        }
-
         }
 
 

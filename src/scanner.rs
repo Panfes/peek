@@ -5,10 +5,15 @@ use nix::poll::{self, PollFd, PollFlags};
 use nix::sys::socket::{connect, getsockopt, sockopt, SockaddrIn};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
+use std::time::{Instant, Duration};
 
+const CONNECTION_TIMEOUT_MS: u16 = 700;
+
+// Соединения которые не завершились
 pub struct PendingConnection {
     fd: OwnedFd,
     port: u16,
+    started_at: Instant,
 }
 
 pub struct Scanner {
@@ -26,79 +31,135 @@ impl Scanner {
         let fd = create_nonblocking_tcp_socket()?;
 
         match connect(fd.as_raw_fd(), &sockaddr) {
+            // Соединение сразу готово
             Ok(_) => Ok(Some(ScanResult {
                 port,
                 status: PortStatus::Open,
             })),
+
+            // Соединение начало устанавливаться 
             Err(Errno::EINPROGRESS) => {
-                self.pending.push(PendingConnection { fd, port });
+                self.pending.push(PendingConnection { fd, port, started_at: Instant::now(), });
                 Ok(None)
             }
+
+            // Сразу отказ
             Err(Errno::ECONNREFUSED) => Ok(Some(ScanResult {
                 port,
                 status: PortStatus::Closed,
             })),
+
+            // Сразу таймаут
             Err(Errno::ETIMEDOUT) => Ok(Some(ScanResult {
                 port,
                 status: PortStatus::Timeout,
             })),
+
+            // Не сделал еще
             Err(_) => todo!(),
         }
     }
 
-    pub fn wait(&mut self) -> nix::Result<Vec<usize>> {
+    // Важно! эта функция только ждет, а потом возвращает то что получила
+    pub fn wait(&mut self) -> nix::Result<(Vec<u16>, Vec<u16>)> {
+
+        // Превращение обычного дескриптора, в структуру для poll()
         let mut fds: Vec<PollFd> = self
             .pending
             .iter()
             .map(|c| PollFd::new(c.fd.as_fd(), PollFlags::POLLOUT))
             .collect();
 
-        poll::poll(&mut fds, 1000u16)?;
+        poll::poll(&mut fds, CONNECTION_TIMEOUT_MS)?;
 
-        let mut ready = Vec::new();
+        // Готовые порты
+        let mut ready_ports = Vec::new();
+
         for (i, fd) in fds.iter().enumerate() {
             if let Some(events) = fd.revents() 
                 && events.contains(PollFlags::POLLOUT) {
-                    ready.push(i);
+                    ready_ports.push(self.pending[i].port);
             }
         }
-        Ok(ready)
+
+        let timeout = Duration::from_millis(CONNECTION_TIMEOUT_MS as u64);
+        
+        let mut timeout_ports: Vec<u16> = Vec::new();
+
+        // Выявление порта с таймаутом
+        for (index, pending) in self.pending.iter().enumerate() {
+            let duration = pending.started_at.elapsed();
+            if duration >= timeout {
+                timeout_ports.push(self.pending[index].port);
+            }
+        }
+
+        Ok((ready_ports, timeout_ports))
     }
 
-    pub fn connection_results(&mut self, ready: Vec<usize>) -> nix::Result<Vec<ScanResult>> {
+    // Важно! функция возвращает результат для портов с таймаутом, и удаляет порт из пендинг
+    pub fn timeout_results(&mut self, timeout_ports: Vec<u16>) -> nix::Result<Vec<ScanResult>> {
         let mut results = Vec::new();
 
-        for i in ready.into_iter().rev() {
-            let conn = self.pending.remove(i);
-            let err = getsockopt(&conn.fd, sockopt::SocketError)?;
+        for timeout_port in timeout_ports {
+            if let Some(index) = self.pending
+                .iter()
+                .position(|conn| conn.port == timeout_port) {
+                    let conn = self.pending.remove(index);
 
-            if err == 0 {
-                results.push(ScanResult {
-                    port: conn.port,
-                    status: PortStatus::Open,
-                });
-            } else {
-                results.push(ScanResult {
-                    port: conn.port,
-                    status: PortStatus::Closed,
-                });
+                    results.push(ScanResult {
+                        port: conn.port,
+                        status: PortStatus::Timeout,
+                    });
             }
         }
         Ok(results)
     }
 
-    pub fn run(&mut self, port: u16) -> nix::Result<Vec<ScanResult>> {
+    pub fn ready_results(&mut self, ready_ports: Vec<u16>) -> nix::Result<Vec<ScanResult>> {
+        let mut results = Vec::new();
+        
+        for ready_port in ready_ports {
+            if let Some(index) = self.pending
+                .iter()
+                .position(|conn| conn.port == ready_port) {
+                    let conn = self.pending.remove(index);
+                    let err = getsockopt(&conn.fd, sockopt::SocketError)?;
+
+                    if err == 0 {
+                        results.push(ScanResult {
+                            port: conn.port,
+                            status: PortStatus::Open,
+                        });
+                    } else {
+                        results.push(ScanResult {
+                            port: conn.port,
+                            status: PortStatus::Closed,
+                        });
+                    }
+                }
+            }
+
+        Ok(results)
+    }
+
+    pub fn run(&mut self, start: u16, end: u16) -> nix::Result<Vec<ScanResult>> {
         let mut results = Vec::new();
 
-        if let Some(res) = self.start_connection(port)? {
-            results.push(res);
-
+        for port in start..=end {
+            if let Some(res) = self.start_connection(port)? {
+                results.push(res);
+            }
         }
 
         while !self.pending.is_empty() {
-            let ready = self.wait()?;
-            let mut batch = self.connection_results(ready)?;
-            results.append(&mut batch);
+            let (ready, timeout) = self.wait()?;
+
+            let mut ready_batch = self.ready_results(ready)?;
+            let mut timeout_batch = self.timeout_results(timeout)?;
+
+            results.append(&mut ready_batch);
+            results.append(&mut timeout_batch);
         }
         Ok(results)
     }

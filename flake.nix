@@ -24,7 +24,6 @@
           toolchain
           pkgs.gcc
           pkgs.pkg-config
-          pkgs.python3
         ];
 
         shellHook = ''

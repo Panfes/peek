@@ -9,8 +9,6 @@ pub struct Args {
 
     // port range
     pub range: String,
-
-
 }
 
 impl Args {
