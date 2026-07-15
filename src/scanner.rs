@@ -55,8 +55,10 @@ impl Scanner {
                 status: PortStatus::Timeout,
             })),
 
-            // Не сделал еще
-            Err(_) => todo!(),
+            Err(err) => {
+                eprintln!("{err}");
+                Err(err)
+            }
         }
     }
 
@@ -94,6 +96,7 @@ impl Scanner {
             }
         }
 
+        // Нужно для того чтобы обработать каждый элемент кортежа, и вытянуть из него статус
         Ok((ready_ports, timeout_ports))
     }
 
@@ -105,6 +108,8 @@ impl Scanner {
             if let Some(index) = self.pending
                 .iter()
                 .position(|conn| conn.port == timeout_port) {
+                    // Уадляем соединение из pending, потому-что оно больше не должно
+                    // участвовать в следующих вызовах poll()
                     let conn = self.pending.remove(index);
 
                     results.push(ScanResult {

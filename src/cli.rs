@@ -1,14 +1,16 @@
 use clap::Parser;
-use std::net::Ipv4Addr;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
     // ip - internet protocol
-    pub ip: Ipv4Addr,
+    pub host: String,
 
     // port range
     pub range: String,
+
+    #[arg(short, long)]
+    pub verbose: bool,
 }
 
 impl Args {
