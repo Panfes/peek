@@ -4,7 +4,7 @@
 use std::net::Ipv4Addr;
 use std::time::Duration;
 
-use crate::models::{ScanResult, PortStatus};
+use crate::scanner::connect::models::{ScanResult, PortStatus};
 use crate::scanner::syn::target::{ScanState, ScanTarget};
 use owo_colors::{OwoColorize, Style};
 

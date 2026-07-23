@@ -2,8 +2,7 @@
 mod cli;
 mod dns;
 mod formatter;
-mod models;
-mod net;
+mod route;
 mod scanner;
 
 use clap::Parser;
@@ -12,7 +11,12 @@ use std::time::Instant;
 use rand::prelude::*;
 
 use crate::scanner::connect::Scanner;
-use crate::scanner::syn::{self, sender, socket};
+use crate::scanner::syn::ScanTarget;
+use crate::scanner::syn::{
+    Scanner as SynScanner,
+    Sender,
+    create_nonblocking_syn_socket,
+};
 
 fn main() -> nix::Result<()> {
     let args = cli::Args::parse();
@@ -54,10 +58,10 @@ fn main() -> nix::Result<()> {
 
         let source = SocketAddrV4::new(source_ip, source_port);
 
-        let fd = socket::create_nonblocking_syn_socket()?;
+        let fd = create_nonblocking_syn_socket()?;
 
-        let sender = sender::Sender::new(fd);
-        let mut scanner = syn::scanner::Scanner::new(sender);
+        let sender = Sender::new(fd);
+        let mut scanner = SynScanner::new(sender);
 
         let started_at_for_formatter = Instant::now();
 
@@ -65,7 +69,7 @@ fn main() -> nix::Result<()> {
 
             for port in start..=end {
                 let destination = SocketAddrV4::new(ip, port);
-                let target = syn::target::ScanTarget::new(source, destination);
+                let target = ScanTarget::new(source, destination);
                 scanner.add_target(target);
             }
             scanner.event_loop()?;

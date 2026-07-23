@@ -1,13 +1,14 @@
 // src/scanner/connect/scanner.rs
 
-use crate::models::{PortStatus, ScanResult};
-use crate::net::create_nonblocking_tcp_socket;
 use nix::errno::Errno;
 use nix::poll::{self, PollFd, PollFlags};
 use nix::sys::socket::{connect, getsockopt, sockopt, SockaddrIn};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 use std::time::{Instant, Duration};
+
+use crate::scanner::connect::models::{PortStatus, ScanResult};
+use crate::scanner::connect::net::create_nonblocking_tcp_socket;
 
 const CONNECTION_TIMEOUT_MS: u16 = 400;
 
