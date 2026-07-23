@@ -1,3 +1,6 @@
+// src/models.rs
+// Структуры
+
 #[derive(PartialEq)]
 pub enum PortStatus {
     Open,

@@ -1,5 +1,8 @@
+// src/net
+// Делает сокет
+
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
-use nix::sys::socket::{self, AddressFamily, SockFlag, SockType};
+use nix::sys::socket::{self, AddressFamily, SockFlag, SockType, SockProtocol};
 use std::os::fd::OwnedFd;
 
 pub fn create_nonblocking_tcp_socket() -> nix::Result<OwnedFd> {
@@ -7,7 +10,7 @@ pub fn create_nonblocking_tcp_socket() -> nix::Result<OwnedFd> {
         AddressFamily::Inet,
         SockType::Stream,
         SockFlag::empty(),
-        None,
+        SockProtocol::Tcp,
     )?;
     
     let current_flags = fcntl(&fd, FcntlArg::F_GETFL)?;

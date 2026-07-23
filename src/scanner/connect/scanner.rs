@@ -1,3 +1,5 @@
+// src/scanner/connect/scanner.rs
+
 use crate::models::{PortStatus, ScanResult};
 use crate::net::create_nonblocking_tcp_socket;
 use nix::errno::Errno;
@@ -7,7 +9,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::fd::{AsFd, AsRawFd, OwnedFd};
 use std::time::{Instant, Duration};
 
-const CONNECTION_TIMEOUT_MS: u16 = 700;
+const CONNECTION_TIMEOUT_MS: u16 = 400;
 
 // Соединения которые не завершились
 pub struct PendingConnection {
@@ -57,7 +59,7 @@ impl Scanner {
 
             Err(err) => {
                 eprintln!("{err}");
-                Err(err)
+                todo!();
             }
         }
     }

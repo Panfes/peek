@@ -1,5 +1,5 @@
 {
-  description = "Rust development shell, using the fenix overlay for nightly version of the software";
+  description = "Rust development shell, using the fenix overlay for latest/nightly version of the software";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -24,11 +24,14 @@
           toolchain
           pkgs.gcc
           pkgs.pkg-config
+          pkgs.tcpdump
+          pkgs.python3
+          pkgs.nmap
         ];
 
         shellHook = ''
           export RUST_SRC_PATH="${toolchain}/lib/rustlib/src/rust/library"
-          echo "Rust development shell, using the fenix overlay for nightly version of the soft"
+          echo "Rust development shell, using the fenix overlay for latest/nightly version of the soft"
         '';
       };
     };

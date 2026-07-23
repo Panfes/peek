@@ -1,3 +1,6 @@
+// src/dns.rs
+// Для резолвинга днс
+
 use std::net::{Ipv4Addr, ToSocketAddrs};
 
 pub fn resolve(host: &str) -> Option<Ipv4Addr> {

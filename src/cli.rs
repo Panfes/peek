@@ -1,3 +1,7 @@
+// src/cli.rs
+// Аргументы терминала
+
+#![allow(non_snake_case)]
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -11,6 +15,9 @@ pub struct Args {
 
     #[arg(short, long)]
     pub verbose: bool,
+
+    #[arg(short, long)]
+    pub sS: bool
 }
 
 impl Args {
