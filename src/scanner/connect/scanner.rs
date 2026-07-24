@@ -10,7 +10,7 @@ use std::time::{Instant, Duration};
 use crate::scanner::connect::models::{PortStatus, ScanResult};
 use crate::scanner::connect::net::create_nonblocking_tcp_socket;
 
-const CONNECTION_TIMEOUT_MS: u16 = 400;
+const CONNECTION_TIMEOUT_MS: u16 = 150;
 
 // Соединения которые не завершились
 pub struct PendingConnection {

@@ -12,8 +12,8 @@ use crate::scanner::syn::target::ScanTarget;
 use crate::scanner::syn::target::ScanState;
 
 
-const TIMEOUT: Duration = Duration::from_millis(400);
-const WINDOW_SIZE: usize = 1500;
+const TIMEOUT: Duration = Duration::from_millis(150);
+const WINDOW_SIZE: usize = 5000;
 
 pub struct Scanner {
     sender: Sender,
@@ -156,7 +156,7 @@ impl Scanner {
 
             let count = epoll.wait(
                 &mut events,
-                10u16,
+                1u16,
             )?;
 
             if count == 0 {
